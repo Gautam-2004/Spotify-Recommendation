@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
-import difflib
 
 app = Flask(__name__)
 
@@ -16,9 +15,6 @@ df = df.drop_duplicates(subset=['track_name', 'artists'], keep='first')
 features = ['danceability', 'energy', 'key', 'loudness', 'speechiness', 'acousticness', 
             'instrumentalness', 'liveness', 'valence', 'tempo', 'popularity']
 
-# Handle missing values
-df[features] = df[features].fillna(df[features].mean())
-
 # Standardization
 scaler = StandardScaler()
 scaled_data = scaler.fit_transform(df[features])
@@ -27,43 +23,32 @@ scaled_data = scaler.fit_transform(df[features])
 knn = NearestNeighbors(n_neighbors=20, algorithm='auto')
 knn.fit(scaled_data)
 
-# Find closest match for a given song name
-def find_closest_song(song_name):
-    possible_matches = difflib.get_close_matches(song_name.lower(), df['track_name'].str.lower(), n=1, cutoff=0.4)
-    return possible_matches[0] if possible_matches else None
-
 # Recommendation function
 def recommend_song(song_name):
-    closest_match = find_closest_song(song_name)
-    if closest_match is None:
-        return []
-    
-    song = df[df['track_name'].str.lower().str.contains(closest_match, na=False)]
-    song = song.sort_values(by='popularity', ascending=False).head(1)
+    song = df[df['track_name'].str.lower() == song_name.lower()].sort_values(by='popularity', ascending=False).head(1)
     
     if song.empty:
         return []
-    
-    print("Matched Song:", song[['track_name', 'artists']])  # Debugging
 
     song_features = song[features].values.reshape(1, -1)
     scaled_song = scaler.transform(song_features)
-
+    
     distances, indices = knn.kneighbors(scaled_song)
-
+    
     recommended_songs = df.iloc[indices[0]]
+    
     recommended_songs = recommended_songs[recommended_songs['track_genre'] == song['track_genre'].values[0]]
-
-    if recommended_songs.empty:
-        recommended_songs = df[df['track_genre'] == song['track_genre'].values[0]].sort_values(by='popularity', ascending=False).head(5)
-
+    recommended_songs = recommended_songs[(recommended_songs['track_name'].str.lower() != song_name.lower()) | 
+                                          (recommended_songs['artists'] != song['artists'].values[0])]
+    
     recommended_songs['similarity_score'] = 1.0
     recommended_songs.loc[recommended_songs['artists'] == song['artists'].values[0], 'similarity_score'] *= 1.2
     recommended_songs = recommended_songs.sort_values(by=['similarity_score', 'popularity'], ascending=[False, False])
-
-    # Ensure the searched song comes first
-    recommended_songs = pd.concat([song, recommended_songs]).drop_duplicates().head(5)
-
+    
+    if len(recommended_songs) < 5:
+        additional_songs = df[df['track_genre'] == song['track_genre'].values[0]].sort_values(by='popularity', ascending=False)
+        recommended_songs = pd.concat([recommended_songs, additional_songs]).drop_duplicates().head(5)
+    
     return recommended_songs[['track_name', 'artists', 'track_genre', 'popularity']].to_dict(orient='records')
 
 @app.route('/recommend', methods=['POST'])
