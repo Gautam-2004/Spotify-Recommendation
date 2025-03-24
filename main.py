@@ -45,8 +45,13 @@ def recommend_song(song_name):
     recommended_songs.loc[recommended_songs['artists'] == song['artists'].values[0], 'similarity_score'] *= 1.2
     recommended_songs = recommended_songs.sort_values(by=['similarity_score', 'popularity'], ascending=[False, False])
     
-    if len(recommended_songs) < 5:
-        additional_songs = df[df['track_genre'] == song['track_genre'].values[0]].sort_values(by='popularity', ascending=False)
+ if len(recommended_songs) < 5:
+        additional_songs = df[
+            (df['track_genre'] == song['track_genre'].values[0]) &
+            ((df['track_name'].str.lower() != song_name.lower()) | 
+             (df['artists'] != song['artists'].values[0]))
+        ].sort_values(by='popularity', ascending=False)
+        
         recommended_songs = pd.concat([recommended_songs, additional_songs]).drop_duplicates().head(5)
     
     return recommended_songs[['track_name', 'artists', 'track_genre', 'popularity']].to_dict(orient='records')
