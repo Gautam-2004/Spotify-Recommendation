@@ -37,15 +37,18 @@ def recommend_song(song_name):
     
     recommended_songs = df.iloc[indices[0]]
     
+    # Filter by genre and exclude the same song
     recommended_songs = recommended_songs[recommended_songs['track_genre'] == song['track_genre'].values[0]]
     recommended_songs = recommended_songs[(recommended_songs['track_name'].str.lower() != song_name.lower()) | 
                                           (recommended_songs['artists'] != song['artists'].values[0])]
     
+    # Similarity score adjustment
     recommended_songs['similarity_score'] = 1.0
     recommended_songs.loc[recommended_songs['artists'] == song['artists'].values[0], 'similarity_score'] *= 1.2
     recommended_songs = recommended_songs.sort_values(by=['similarity_score', 'popularity'], ascending=[False, False])
     
- if len(recommended_songs) < 5:
+    # Add additional songs if fewer than 5, excluding the original song
+    if len(recommended_songs) < 5:
         additional_songs = df[
             (df['track_genre'] == song['track_genre'].values[0]) &
             ((df['track_name'].str.lower() != song_name.lower()) | 
